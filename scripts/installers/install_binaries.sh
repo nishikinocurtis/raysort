@@ -14,7 +14,7 @@ install_gensort() {
     mkdir -p $DIR
     pushd $DIR
     TARFILE=gensort-linux-1.5.tar.gz
-    wget http://www.ordinal.com/try.cgi/$TARFILE
+    wget --no-check-certificate http://www.ordinal.com/try.cgi/$TARFILE
     tar xf $TARFILE
     popd
 }
@@ -76,7 +76,7 @@ show_help() {
 
 args="$@"
 if [ -z "$args" ]; then
-    args="gensort prometheus node_exporter grafana"
+    args="gensort"
 fi
 
 prepare

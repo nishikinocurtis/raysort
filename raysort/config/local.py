@@ -4,19 +4,19 @@ import os
 from raysort.config.common import (
     InstanceType,
     JobConfig,
-    SpillingMode,
-    get_s3_buckets,
     get_steps,
 )
 
 local_cluster = dict(
-    instance_count=min(os.cpu_count() or 16, 16),
+    # instance_count=min(os.cpu_count() or 16, 16),
+    instance_count=4,
     instance_type=InstanceType(
         name="local",
-        cpu=2,
-        memory_gib=0,  # not used
+        cpu=8,
+        # memory_gib=0,  # not used
+        memory_gib=1,  # not used
     ),
-    local=True,
+    local=False,
 )
 
 local_base_app_config = dict(
@@ -37,268 +37,276 @@ local_app_config = dict(
     input_part_gb=0.002,
 )
 
+local_64gb_64par = dict(
+    **local_base_app_config,
+    total_gb=64,
+    input_part_gb=1,
+)
+
+local_32gb_64par = dict(
+    **local_base_app_config,
+    total_gb=32,
+    input_part_gb=0.5,
+)
+
+local_32gb_32par = dict(
+    **local_base_app_config,
+    total_gb=32,
+    input_part_gb=1,
+)
+
+local_32gb_16par = dict(
+    **local_base_app_config,
+    total_gb=32,
+    input_part_gb=2,
+)
+
+local_16gb_128par = dict(
+    **local_base_app_config,
+    total_gb=16,
+    input_part_gb=0.125,
+)
+
+local_16gb_64par = dict(
+    **local_base_app_config,
+    total_gb=16,
+    input_part_gb=0.25,
+)
+
+local_16gb_32par = dict(
+    **local_base_app_config,
+    total_gb=16,
+    input_part_gb=0.5,
+)
+
+local_16gb_16par = dict(
+    **local_base_app_config,
+    total_gb=16,
+    input_part_gb=1,
+)
+
+local_4gb_16par = dict(
+    **local_base_app_config,
+    total_gb=4,
+    input_part_gb=0.25,
+)
+
+local_1gb_16par = dict(
+    **local_base_app_config,
+    total_gb=1,
+    input_part_gb=0.0625,
+)
+
 configs = [
     # ------------------------------------------------------------
     #     Local experiments
     # ------------------------------------------------------------
-    JobConfig(
-        name="LocalSimple",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            simple_shuffle=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalManualSpillingDisk",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            spilling=SpillingMode.DISK,
-        ),
-    ),
-    JobConfig(
-        name="LocalManualSpillingDiskParallel",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            spilling=SpillingMode.DISK,
-        ),
-    ),
+    
     JobConfig(
         name="LocalNative",
         cluster=local_cluster,
         system=dict(),
-        app=dict(**local_app_config),
+        app=dict(**local_app_config),  # --> sort_two_stage()
     ),
     JobConfig(
-        name="LocalNativePut",
+        name="LocalNative64g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_64gb_64par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative32g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_64par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative32g32",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_32par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative32g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_16par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative16g128",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_128par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative16g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_64par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative16g32",
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_app_config,
-            use_put=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalNativeYield",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            use_yield=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalMagnet",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            magnet=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalRiffle",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            riffle=True,
-            merge_factor=8,
-        ),
-    ),
-    JobConfig(
-        name="LocalNativeReduceOnly",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            skip_first_stage=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalSchedulingDebug",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
+            **local_16gb_32par,
             simple_shuffle=True,
-        ),
+            skip_output=True,
+            ),
     ),
     JobConfig(
-        name="LocalSkew",
+        name="LocalNative16g16",
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_app_config,
-            data_skew=True,
-        ),
-    ),
-    # ------------------------------------------------------------
-    #     Local fault tolerance experiments
-    # ------------------------------------------------------------
-    JobConfig(
-        name="LocalSimpleFT",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
+            **local_16gb_16par,
             simple_shuffle=True,
-            skip_input=True,
-            fail_node=0,
-        ),
+            skip_output=True,
+            ),
     ),
     JobConfig(
-        name="LocalNativeFT",
+        name="LocalNative4g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_4gb_16par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalNative1g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_1gb_16par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle64g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_64gb_64par,
+                 simple_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle32g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_64par,
+                 use_put=True,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle32g32",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_32par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle32g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_16par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle16g128",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_128par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle16g64",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_64par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle16g32",
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_app_config,
-            skip_input=True,
-            fail_node=0,
-        ),
+            **local_16gb_32par,
+            naive_shuffle=True,
+            skip_output=True,
+            ),
     ),
     JobConfig(
-        name="LocalNativePutFT",
+        name="LocalSingle16g16",
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_app_config,
-            use_put=True,
-            skip_input=True,
-            fail_node=0,
-        ),
+            **local_16gb_16par,
+            naive_shuffle=True,
+            skip_output=True,
+            ),
     ),
     JobConfig(
-        name="LocalMagnetFT",
+        name="LocalSingle4g16",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_app_config,
-            magnet=True,
-            skip_input=True,
-            fail_node=0,
-        ),
+        app=dict(**local_4gb_16par,
+                 naive_shuffle=True,
+                 skip_output=True,),
     ),
     JobConfig(
-        name="LocalRiffleFT",
+        name="LocalSingle1g16",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_app_config,
-            riffle=True,
-            merge_factor=8,
-            skip_input=True,
-            fail_node=0,
-        ),
-    ),
-    # ------------------------------------------------------------
-    #     Local S3 spilling experiments
-    # ------------------------------------------------------------
+        app=dict(**local_1gb_16par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),    
     JobConfig(
-        name="LocalS3Spilling",
-        cluster=local_cluster,
-        system=dict(
-            s3_spill=4,
-        ),
-        app=dict(
-            **local_mini_app_config,
-        ),
-    ),
-    JobConfig(
-        name="LocalS3IO",
+        name="LocalReuse32g32",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-        ),
+        app=dict(**local_32gb_32par,
+                 reuse=True,
+                 skip_output=True,),
     ),
     JobConfig(
-        name="LocalS3IOSkew",
+        name="LocalReuseSimple32g32",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-            data_skew=True,
-        ),
+        app=dict(**local_32gb_32par,
+                 reuse_simple=True,
+                 skip_output=True,),
     ),
     JobConfig(
-        name="LocalS3IOMultiShard",
+        name="LocalReuse16g32",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-            num_shards_per_mapper=2,
-        ),
+        app=dict(**local_16gb_32par,
+                 reuse=True,
+                 skip_output=True,),
     ),
     JobConfig(
-        name="LocalS3IOAndSpilling",
-        cluster=local_cluster,
-        system=dict(
-            s3_spill=4,
-        ),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-        ),
-    ),
-    JobConfig(
-        name="LocalS3IOManualSpillingS3",
+        name="LocalReuseSimple16g32",
         cluster=local_cluster,
         system=dict(),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-            spilling=SpillingMode.S3,
-        ),
-    ),
-    JobConfig(
-        name="LocalS3IOManualSpillingS3Parallel",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_mini_app_config,
-            s3_buckets=get_s3_buckets(1),
-            spilling=SpillingMode.S3,
-        ),
-    ),
-    # ------------------------------------------------------------
-    #     Local data loader experiments
-    # ------------------------------------------------------------
-    JobConfig(
-        name="LocalNoStreamingDL",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            skip_input=True,
-        ),
-    ),
-    JobConfig(
-        name="LocalPartialStreamingDL",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            skip_input=True,
-            dataloader_mode="partial",
-        ),
-    ),
-    JobConfig(
-        name="LocalFullStreamingDL",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            skip_input=True,
-            dataloader_mode="streaming",
-        ),
+        app=dict(**local_16gb_32par,
+                 reuse_simple=True,
+                 skip_output=True,),
     ),
 ]

@@ -66,6 +66,15 @@ def mapper(
             ret = [part[offset : offset + size] for offset, size in blocks]
         # Return an extra object for tracking task progress.
         return ret + [None]
+    
+@ray.remote(num_cpus=0)
+def mapper_naive(
+    cfg: AppConfig, _mapper_id: PartId, bounds: list[int], pinfolist: list[PartInfo]
+) -> tuple[ray.ObjectRef, list[tuple[int, int]]]:
+    with tracing_utils.timeit("map_naive"):
+        part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
+        ret = (ray.put(part), blocks)
+        return ret
 
 
 @ray.remote(num_cpus=0)
@@ -230,7 +239,7 @@ def final_merge(
 
         M = len(parts)
 
-        def get_block(i: int, d: int) -> np.ndarray:
+        def get_block(i: int, d: int) -> np.ndarray: # i = which mapper
             if i >= M or d > 0:
                 return None
             part = parts[i]
@@ -260,10 +269,10 @@ def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> dict:
 
 
 @ray.remote(num_cpus=0)
-def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list) -> list[PartInfo]:
-    with tracing_utils.timeit("reduce_master"):
+def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list, stride_mode: int) -> list[PartInfo]:
+    with tracing_utils.timeit("reduce_master" + str(stride_mode)):
         tasks = []
-        for r in range(cfg.num_reducers_per_worker):
+        for r in range(cfg.num_reducers_per_worker): # = worker = cpu * parallelism, nrpw = reducer / worker, this is inside a local worker.
             if r >= cfg.reduce_parallelism:
                 ray_utils.wait(tasks[: r - cfg.reduce_parallelism + 1], wait_all=True)
             tasks.append(
@@ -278,18 +287,138 @@ def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
     get_reduce_master_args: Callable[[int], list],
+    stride_mode: int = 0,
 ) -> list[PartInfo]:
     if cfg.skip_final_reduce:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
     tasks = [
         reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
-            cfg, w, get_reduce_master_args(w)
+            cfg, w, get_reduce_master_args(w), stride_mode
         )
         for w in range(cfg.num_workers)
     ]
     return flatten(ray.get(tasks))
 
+@ray.remote(num_cpus=0)
+def final_merge_naive(
+    cfg: AppConfig,
+    worker_id: PartId,
+    reducer_id: PartId,
+    parts: np.ndarray,
+    stride_mode: int,
+) -> list[PartInfo]:
+    with tracing_utils.timeit("reduce"):
+        M = len(parts)
+        part_id = constants.merge_part_ids(worker_id, reducer_id)
+        pinfo = sort_utils.part_info(
+            cfg, part_id, kind="output", cloud=cfg.cloud_storage
+        )
+
+        def get_block(i: int, _: int) -> np.ndarray: # i = which mapper
+            # parts should be an array of fut, 
+            numbers, bounds = ray.get(parts[i]) 
+            numbers = ray.get(numbers) 
+            # the bound to use should be w * nrpw + r
+            bounds_idx = worker_id * cfg.num_reducers_per_worker + reducer_id
+            if stride_mode == 1:
+                bounds_idx = cfg.num_reducers - bounds_idx - 1 # reverse
+            elif stride_mode == 2:
+                bounds_idx = ((worker_id + cfg.num_workers) % cfg.num_workers) * cfg.num_reducers_per_worker + reducer_id # shift
+            offset, size = bounds[bounds_idx]
+            return numbers[offset : offset + size]
+            
+        merge_fn = sortlib.merge_partitions
+        merger = merge_fn(M, get_block)
+        return sort_utils.save_partition(cfg, pinfo, merger)
+
+@ray.remote(num_cpus=0)
+def reduce_master_naive(cfg: AppConfig, worker_id: int, merge_parts: np.ndarray, stride_mode: int) -> list[PartInfo]:
+    with tracing_utils.timeit("reduce_master" + str(stride_mode)):
+        tasks = []
+
+        for r in range(cfg.num_reducers_per_worker):
+            if r >= cfg.reduce_parallelism:
+                ray_utils.wait(tasks[: r - cfg.reduce_parallelism + 1], wait_all=True)
+            tasks.append(
+                final_merge_naive.options(**ray_utils.node_i(cfg, worker_id)).remote(
+                    cfg, worker_id, r, merge_parts, stride_mode
+                )
+            )
+        return flatten(ray.get(tasks))
+
+def reduce_naive(
+    cfg: AppConfig,
+    merge_results: np.ndarray,
+    stride_mode: int=0,
+) -> list[PartInfo]:
+    tasks = [
+        reduce_master_naive.options(**ray_utils.node_i(cfg, w)).remote(
+            cfg, w, merge_results, stride_mode
+        )
+        for w in range(cfg.num_workers)
+    ]
+    return flatten(ray.get(tasks))
+
+def sort_naive(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
+    bounds_sort, _ = sort_utils.get_boundaries(cfg.num_reducers)
+
+    mapper_opt = {"num_returns": 1}
+    map_results = np.empty((cfg.num_mappers,), dtype=object)
+    num_map_tasks_per_round = cfg.num_workers * cfg.map_parallelism
+
+    for part_id in range(cfg.num_mappers):
+        pinfo = parts[part_id]
+        opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+        map_results[part_id] = mapper_naive.options(**opt).remote(
+            cfg, part_id, bounds_sort, [pinfo]
+        )
+        if part_id > 0 and part_id % num_map_tasks_per_round == 0:
+            ray_utils.wait(
+                map_results[:], num_returns=part_id - num_map_tasks_per_round + 1
+            )
+
+    return reduce_naive(
+        cfg,
+        map_results,
+    )
+
+def sort_reuse_naive(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
+    bounds_sort, _ = sort_utils.get_boundaries(cfg.num_reducers)
+
+    mapper_opt = {"num_returns": 1}
+    map_results = np.empty((cfg.num_mappers,), dtype=object)
+    num_map_tasks_per_round = cfg.num_workers * cfg.map_parallelism
+
+    for part_id in range(cfg.num_mappers):
+        pinfo = parts[part_id]
+        opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+        map_results[part_id] = mapper_naive.options(**opt).remote(
+            cfg, part_id, bounds_sort, [pinfo]
+        )
+        if part_id > 0 and part_id % num_map_tasks_per_round == 0:
+            ray_utils.wait(
+                map_results[:], num_returns=part_id - num_map_tasks_per_round + 1
+            )
+
+    reduce_naive(
+        cfg,
+        map_results,
+    )
+
+    # reverse
+    reduce_naive(
+        cfg,
+        map_results,
+        1
+    )
+
+    # shift
+    reduce_naive(
+        cfg,
+        map_results,
+        2
+    )
 
 def sort_simple(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
@@ -323,6 +452,60 @@ def sort_simple(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         ],
     )
 
+def sort_reuse_simple(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
+    bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
+
+    mapper_opt = {"num_returns": cfg.num_reducers + 1}
+    map_results = np.empty((cfg.num_mappers, cfg.num_reducers), dtype=object)
+    num_map_tasks_per_round = cfg.num_workers * cfg.map_parallelism
+
+    for part_id in range(cfg.num_mappers):
+        pinfo = parts[part_id]
+        opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+        map_results[part_id, :] = mapper.options(**opt).remote(
+            cfg, part_id, bounds, [pinfo]
+        )[: cfg.num_reducers]
+        # TODO(@lsf): try memory-aware scheduling
+        if part_id > 0 and part_id % num_map_tasks_per_round == 0:
+            # Wait for at least one map task from this round to finish before
+            # scheduling the next round.
+            ray_utils.wait(
+                map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
+            )
+
+    ray_utils.fail_and_restart_node(cfg)
+
+    reduce_stage(
+        cfg,
+        map_results[:, 0],
+        lambda w: [
+            map_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
+    )  
+
+    # reuse it: reverse
+    reduce_stage(
+        cfg,
+        map_results[:, 0],
+        lambda w: [
+            map_results[:, cfg.num_reducers - (w * cfg.num_reducers_per_worker + r) - 1]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
+        1
+    )  
+
+
+    # reuse in another way: shift
+    reduce_stage(
+        cfg,
+        map_results[:, 0],
+        lambda w: [
+            map_results[:, ((w + cfg.num_workers) % cfg.num_workers) * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
+        2
+    )  
 
 def sort_riffle(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     round_merge_factor = cfg.merge_factor // cfg.map_parallelism
@@ -524,7 +707,13 @@ def sort_reduce_only(cfg: AppConfig) -> list[PartInfo]:
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
 
-    if cfg.simple_shuffle:
+    if cfg.reuse:
+        results = sort_reuse_naive(cfg, parts)
+    elif cfg.reuse_simple:
+        results = sort_reuse_simple(cfg, parts)
+    elif cfg.naive_shuffle:
+        results = sort_naive(cfg, parts)
+    elif cfg.simple_shuffle:
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
         results = sort_riffle(cfg, parts)

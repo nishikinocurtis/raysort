@@ -146,7 +146,11 @@ class AppConfig:
     use_put: bool = False
     use_yield: bool = False
 
+    reuse: bool = False
+    reuse_simple: bool = False
+
     simple_shuffle: bool = False
+    naive_shuffle: bool = False
     riffle: bool = False
     magnet: bool = False
 
@@ -252,5 +256,5 @@ def get_steps(steps: Optional[list[AppStep]] = None) -> dict:
         if steps_str:
             steps = [AppStep(step) for step in steps_str.split(",")]
         if not steps:
-            steps = [AppStep.GENERATE_INPUT, AppStep.SORT, AppStep.VALIDATE_OUTPUT]
+            steps = [AppStep.GENERATE_INPUT, AppStep.SORT]
     return {step.value: True for step in steps}

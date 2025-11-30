@@ -64,6 +64,7 @@ class timeit:
             ),
             log_to_wandb=self.log_to_wandb,
         )
+        print(f"{self.event} took {duration:.6f} seconds")
         if self.report_completed:
             tracker.inc.remote(
                 f"{self.event}_completed",

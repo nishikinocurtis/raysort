@@ -233,7 +233,7 @@ def generate_part(
 @ray.remote
 def drop_fs_cache(_: AppConfig):
     subprocess.run(
-        "sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", check=True, shell=True
+        "sudo bash -c 'sync; echo 3 | sudo tee /proc/sys/vm/drop_caches'", check=True, shell=True
     )
     logging.info("Dropped filesystem cache")
 

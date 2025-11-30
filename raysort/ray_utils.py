@@ -294,7 +294,9 @@ def _init_runtime_context(cfg: AppConfig):
     cfg.worker_ips = [
         r.split(":")[1]
         for r in resources
-        if r.startswith("node:") and r != head_node_str and r != internal_head_str
+        # if r.startswith("node:") and r != head_node_str and r != internal_head_str
+        # NOTE: we treat head as one worker too
+        if r.startswith("node:") and r != internal_head_str
     ]
     assert cfg.num_workers == len(cfg.worker_ips), cfg
     cfg.worker_ids = ray.get(
