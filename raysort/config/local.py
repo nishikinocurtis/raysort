@@ -9,7 +9,7 @@ from raysort.config.common import (
 
 local_cluster = dict(
     # instance_count=min(os.cpu_count() or 16, 16),
-    instance_count=4,
+    instance_count=2,
     instance_type=InstanceType(
         name="local",
         cpu=8,
@@ -309,4 +309,52 @@ configs = [
                  reuse_simple=True,
                  skip_output=True,),
     ),
+    JobConfig(
+        name="FlexShuffleMulti16g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_16par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="FlexShuffleMulti32g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_16par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="FlexShuffleMulti4g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_4gb_16par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="ExoShuffleMulti16g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_16gb_16par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="ExoShuffleMulti32g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_32gb_16par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="ExoShuffleMulti4g16",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(**local_4gb_16par,
+                 reuse=True,
+                 skip_output=True,),
+    )
 ]
