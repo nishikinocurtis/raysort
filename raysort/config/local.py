@@ -9,7 +9,18 @@ from raysort.config.common import (
 
 local_cluster = dict(
     # instance_count=min(os.cpu_count() or 16, 16),
-    instance_count=2,
+    instance_count=4,
+    instance_type=InstanceType(
+        name="local",
+        cpu=8,
+        # memory_gib=0,  # not used
+        memory_gib=1,  # not used
+    ),
+    local=False,
+)
+
+scale_cluster = dict(
+    instance_count=16,
     instance_type=InstanceType(
         name="local",
         cpu=8,
@@ -61,12 +72,6 @@ local_32gb_16par = dict(
     input_part_gb=2,
 )
 
-local_16gb_128par = dict(
-    **local_base_app_config,
-    total_gb=16,
-    input_part_gb=0.125,
-)
-
 local_16gb_64par = dict(
     **local_base_app_config,
     total_gb=16,
@@ -95,6 +100,30 @@ local_1gb_16par = dict(
     **local_base_app_config,
     total_gb=1,
     input_part_gb=0.0625,
+)
+
+local_8gb_128par = dict(
+    **local_base_app_config,
+    total_gb=8,
+    input_part_gb=0.0625,
+)
+
+local_16gb_128par = dict(
+    **local_base_app_config,
+    total_gb=16,
+    input_part_gb=0.125,
+)
+
+local_32gb_128par = dict(
+    **local_base_app_config,
+    total_gb=32,
+    input_part_gb=0.25,
+)
+
+local_64gb_128par = dict(
+    **local_base_app_config,
+    total_gb=64,
+    input_part_gb=0.5,
 )
 
 configs = [
@@ -276,7 +305,103 @@ configs = [
         app=dict(**local_1gb_16par,
                  naive_shuffle=True,
                  skip_output=True,),
-    ),    
+    ),
+    JobConfig(
+        name="LocalSingle8g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_8gb_128par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle16g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_16gb_128par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle32g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_32gb_128par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalSingle64g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_64gb_128par,
+                 naive_shuffle=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuse64g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_64gb_128par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuseSimple64g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_64gb_128par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuse32g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_32gb_128par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuseSimple32g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_32gb_128par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuse16g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_16gb_128par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuseSimple16g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_16gb_128par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuse8g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_8gb_128par,
+                 reuse=True,
+                 skip_output=True,),
+    ),
+    JobConfig(
+        name="LocalReuseSimple8g128",
+        cluster=scale_cluster,
+        system=dict(),
+        app=dict(**local_8gb_128par,
+                 reuse_simple=True,
+                 skip_output=True,),
+    ),
     JobConfig(
         name="LocalReuse32g32",
         cluster=local_cluster,
