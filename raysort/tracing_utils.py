@@ -176,7 +176,7 @@ class ProgressTracker:
         try:
             wandb.init(entity="raysort", project=project)
         except wandb.errors.UsageError as e:
-            if "call wandb.login" in e.message:
+            if "wandb login" in e.message:
                 wandb.init(mode="offline")
             else:
                 raise e
